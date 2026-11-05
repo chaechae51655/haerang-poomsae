@@ -127,26 +127,33 @@ button{cursor:pointer}
 .progress i{display:block;height:100%;width:0;background:var(--active)}
 
 /* 크게 보기: 카메라 화면 위에 필요한 정보만 */
-.hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:10px max(12px,env(safe-area-inset-right,0px)) 10px max(12px,env(safe-area-inset-left,0px))}
-.hud-top,.hud-bottom{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
-.hud-bottom{align-items:flex-end}
-.hud-now{background:rgba(0,0,0,.62);border-radius:10px;padding:6px 12px;max-width:62%}
-.hud-now b{font-family:var(--f-display);font-size:26px;color:var(--bone);margin-right:8px}
-.hud-now span{font-weight:900;font-size:18px}
-.hud-now small{display:block;color:var(--muted);font-size:12px;font-weight:700}
-.hud-right{display:flex;gap:8px;align-items:center;pointer-events:auto}
-.hud-right .t{font-family:var(--f-display);font-size:26px;color:var(--bone);background:rgba(0,0,0,.62);border-radius:8px;padding:2px 10px;font-variant-numeric:tabular-nums}
-.hud-right button,.hud-bottom button{pointer-events:auto}
-.hud-v{background:rgba(0,0,0,.62);border-radius:10px;padding:6px 10px;display:grid;gap:4px;max-width:60%}
-.hud-v .chips .chip{padding:3px 8px;font-size:13px} .hud-v .chips .chip .mk{font-size:16px}
-.hud-v .n{font-size:13px;font-weight:700}
-.hud-btns{display:flex;gap:6px;pointer-events:auto}
-.hud-btns .primary{padding:10px 18px;font-size:16px}
-.hud-btns .ctrl{background:rgba(0,0,0,.62)}
-.app.focus .top,.app.focus .side{display:none}
-.app.focus{grid-template-rows:1fr}
+.hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+.hud-top,.hud-bottom{display:flex;gap:12px;align-items:center;justify-content:space-between;background:rgba(12,17,27,.95);padding:6px max(12px,env(safe-area-inset-right,0px)) 6px max(12px,env(safe-area-inset-left,0px));pointer-events:auto}
+.hud-top{height:var(--hud-top);border-bottom:1px solid var(--line)} .hud-bottom{height:var(--hud-bot);border-top:1px solid var(--line)}
+.hud-now{min-width:0;display:flex;align-items:baseline;gap:10px;white-space:nowrap;overflow:hidden}
+.hud-now b{font-family:var(--f-display);font-size:24px;color:var(--bone);flex:none}
+.hud-now span{font-weight:900;font-size:17px;overflow:hidden;text-overflow:ellipsis}
+.hud-now small{color:var(--muted);font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.hud-right{display:flex;gap:10px;align-items:center;flex:none}
+.hud-right .t{font-family:var(--f-display);font-size:24px;color:var(--bone);font-variant-numeric:tabular-nums}
+.hud-v{display:flex;gap:10px;align-items:center;min-width:0}
+.hud-v .chips{flex:none;gap:6px} .hud-v .chips .chip{padding:3px 8px;font-size:13px;gap:6px} .hud-v .chips .chip .mk{font-size:16px}
+.hud-v .n{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.hud.rec .hud-v .chips{display:none}
+.hud-btns{display:flex;gap:6px;flex:none}
+.hud-btns .ctrl{padding:7px 12px}
+.hud-btns .primary{padding:8px 16px;font-size:15px}
+.app.focus{--hud-top:50px;--hud-bot:56px;grid-template-rows:1fr}
+.app.focus .top,.app.focus .side,.app.focus .cam-tools{display:none}
 .app.focus .stage{grid-template-columns:1fr}
-.app.focus .cam-status{top:auto;bottom:auto;left:50%;transform:translateX(-50%);top:10px}
+.app.focus .cam canvas{top:var(--hud-top);bottom:var(--hud-bot);height:auto}
+.app.focus .overlay,.app.focus .cam-empty{top:var(--hud-top);bottom:var(--hud-bot)}
+.app.focus .cmd{font-size:min(20vh,110px)}
+.app.focus .count{font-size:min(10vh,44px)}
+.app.focus .cmd-sub{font-size:15px;margin-top:8px}
+.app.focus .hold{margin-top:8px}
+.app.focus .demo-box{bottom:calc(var(--hud-bot) + 8px)}
+.app.focus .cam-status{top:calc(var(--hud-top) + 8px)}
 
 /* 시트(설정·결과) */
 .sheet-wrap{position:fixed;inset:0;background:rgba(4,7,12,.72);display:flex;justify-content:flex-end;z-index:20}
@@ -266,7 +273,7 @@ td.nt{color:var(--muted);font-size:13px}
 
       <div class="recmode" id="recMode" hidden>
         <button type="button" data-rec="video" aria-pressed="true">영상 올리기<small>찍어 둔 사범님 영상</small></button>
-        <button type="button" data-rec="pose" aria-pressed="false">동작별<small>하나씩 멈춰 찍기</small></button>
+        <button type="button" data-rec="pose" aria-pressed="false">동작별<small>멈춰 찍기 · 사진 1~3장</small></button>
         <button type="button" data-rec="run" aria-pressed="false">연속<small>카메라로 한 번에</small></button>
       </div>
 
@@ -295,6 +302,7 @@ td.nt{color:var(--muted);font-size:13px}
       <div class="motion"><span>움직임</span><div class="bar"><i id="motionFill"></i><b id="motionHi"></b></div></div>
 
       <div class="controls">
+        <button class="ctrl demo wide" id="btnPhoto" type="button" hidden>📷 사진으로 이 동작 넣기 (1~3장)</button>
         <button class="ctrl demo wide" id="btnDemo" type="button" hidden>▶ 이 동작 사범님 시범 보기</button>
         <button class="primary" id="btnStart" type="button">시작</button>
         <button class="ctrl" id="btnPrev" type="button" disabled>◀ 이전</button>
@@ -302,6 +310,7 @@ td.nt{color:var(--muted);font-size:13px}
         <button class="ctrl" id="btnNext" type="button" disabled>건너뛰기 ▶</button>
       </div>
       <input id="videoFile" type="file" accept="video/*" hidden>
+      <input id="photoFile" type="file" accept="image/*" multiple hidden>
     </aside>
   </main>
 </div>
@@ -346,7 +355,7 @@ td.nt{color:var(--muted);font-size:13px}
     </section>
 
     <section>
-      <p class="hint" style="margin-bottom:14px">화면 버전 <b>11-05 16:20</b> · 새 기능이 안 보이면 이 숫자를 확인하고 새로고침해 주세요</p>
+      <p class="hint" style="margin-bottom:14px">화면 버전 <b>11-05 16:40</b> · 새 기능이 안 보이면 이 숫자를 확인하고 새로고침해 주세요</p>
       <h3>최근 기록</h3>
       <div class="list" id="historyList"></div>
       <div class="btns" style="margin-top:10px"><button class="ghost" id="btnExportHistory" type="button">기록 CSV 내보내기</button></div>
@@ -732,7 +741,7 @@ function setMode(mode){
   if(S.phase!=='idle'&&S.phase!=='done') stopSession(true);
   S.mode=mode; S.phase='idle'; S.idx= mode==='record'&&S.rec==='pose' ? firstIncomplete() : 0;
   document.querySelectorAll('.modes button').forEach(b=>b.setAttribute('aria-selected', b.dataset.mode===mode));
-  $('recMode').hidden = mode!=='record';
+  $('recMode').hidden = mode!=='record'; $('hud').classList.toggle('rec', mode==='record');
   $('chips').hidden = mode==='record';
   $('studentName').hidden = mode==='record';
   sessLabel();
@@ -783,6 +792,7 @@ function setControls(){
   $('btnRetry').disabled = !nav;
   $('btnRetry').textContent = isPoseRec() ? '이 동작 지우기' : '이 동작 다시';
   $('btnNext').textContent = S.mode==='practice'||isPoseRec() ? '다음 ▶' : '건너뛰기 ▶';
+  $('btnPhoto').hidden = !isPoseRec() || S.processing || S.phase==='ready';
   $('hNextBtn').disabled=$('btnNext').disabled; $('hRetry').disabled=$('btnRetry').disabled;
 }
 
@@ -853,6 +863,58 @@ async function startCamera(){
 function stopCamera(){
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
   running=false; $('camEmpty').hidden=false; const st=$('camStatus'); st.textContent='카메라 꺼짐'; st.classList.remove('live');
+}
+// 폰을 돌렸는데 카메라 화면이 그대로 세로면 카메라를 다시 켜서 방향을 맞춤
+let orientTimer=0;
+function onOrient(){
+  clearTimeout(orientTimer);
+  orientTimer=setTimeout(async ()=>{
+    if(stream && !S.processing){
+      const land=innerWidth>innerHeight, vland=video.videoWidth>video.videoHeight;
+      if(land!==vland){ const old=stream; stream=null; old.getTracks().forEach(t=>t.stop());
+        try{ stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:settings.camera, width:{ideal:1920}, height:{ideal:1080}}}); video.srcObject=stream; await video.play(); fitCanvas(video.videoWidth, video.videoHeight); }catch(e){ cmd('!','카메라를 다시 켜지 못했어요 · 시작을 다시 눌러 주세요','bad'); stopCamera(); } }
+    }
+    if(S.phase!=='idle') setFocus(smallLandscape());
+  }, 600);
+}
+addEventListener('resize', onOrient); addEventListener('orientationchange', onOrient);
+
+// 동작별 기준: 사진 1~3장으로 넣기
+let imgMarker=null;
+async function loadImageModel(){
+  if(imgMarker) return;
+  const {PoseLandmarker, FilesetResolver} = await import(MP_URL);
+  const fileset = await FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
+  const o = d => ({baseOptions:{modelAssetPath:MODEL.full, delegate:d}, runningMode:'IMAGE', numPoses:1});
+  try{ imgMarker = await PoseLandmarker.createFromOptions(fileset, o('GPU')); }
+  catch(e){ imgMarker = await PoseLandmarker.createFromOptions(fileset, o('CPU')); }
+}
+async function addPhotos(files){
+  const list=[...files].slice(0,3); if(!list.length) return;
+  const i=S.idx, m=SEQ[i];
+  cmd('사진 분석 중', `${m.n}. ${m.name}`, 'white');
+  try{ await loadImageModel(); }catch(e){ cmd('!', 'AI 모델을 불러오지 못했어요 · 인터넷 연결을 확인해 주세요', 'bad'); return; }
+  let ok=0, bad=0;
+  for(const file of list){
+    const url=URL.createObjectURL(file);
+    try{
+      const img=new Image(); img.src=url; await img.decode();
+      const W=img.naturalWidth, H=img.naturalHeight;
+      const r=imgMarker.detect(img);
+      const lm=r.landmarks&&r.landmarks[0], w3=r.worldLandmarks&&r.worldLandmarks[0];
+      fitCanvas(W,H); $('camEmpty').hidden=true; draw(img, lm||null, false);
+      if(!lm || !Core.bodyVisible(lm)){ bad++; continue; }
+      const f=Core.features(lm.map(p=>({x:p.x*W, y:p.y*H})), w3);
+      poses[i].push(Core.measure(m, f, null)); ok++;
+    }catch(e){ bad++; }
+    finally{ URL.revokeObjectURL(url); }
+  }
+  if(poses[i].length>10) poses[i]=poses[i].slice(-10);
+  saveRefs();
+  cmd(ok?'✓':'!', ok ? `${m.n}번에 사진 ${ok}장 저장${bad?` · ${bad}장은 전신이 안 보여 뺐어요`:''}` : '전신(발끝까지)이 나온 사진으로 다시 골라 주세요', ok?'ok':'bad', 2600);
+  if(ok && m.kick) note(`${m.n}번은 앞차기가 있어서, 차는 높이는 사진으로 알 수 없어요. 지르기 자세만 기준으로 저장했어요.`);
+  if(ok && poses[i].length>=settings.poseN && S.idx<SEQ.length-1) S.idx++;
+  setNow(); paintGrid(); setControls();
 }
 function fitCanvas(w,h){ if(w&&h&&(canvas.width!==w||canvas.height!==h)){ canvas.width=w; canvas.height=h; } }
 
@@ -1291,6 +1353,8 @@ const onStart=()=>{
   else if(S.phase==='idle'||S.phase==='done') startSession();
 };
 $('btnStart').onclick=onStart; $('hStart').onclick=onStart;
+$('btnPhoto').onclick=()=>$('photoFile').click();
+$('photoFile').onchange=e=>{ const fs=e.target.files; if(fs&&fs.length) addPhotos(fs).finally(()=>{ e.target.value=''; }); };
 $('videoFile').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(err){} } processVideo(f); } };
 $('grid').onclick=e=>{ const c=e.target.closest('.cell'); if(!c) return;
   const ok = (isPoseRec()||S.mode==='practice') && (S.phase==='idle'||S.phase==='run') && !S.processing; if(!ok) return;
