@@ -346,6 +346,7 @@ td.nt{color:var(--muted);font-size:13px}
     </section>
 
     <section>
+      <p class="hint" style="margin-bottom:14px">화면 버전 <b>11-05 16:10</b> · 새 기능이 안 보이면 이 숫자를 확인하고 새로고침해 주세요</p>
       <h3>최근 기록</h3>
       <div class="list" id="historyList"></div>
       <div class="btns" style="margin-top:10px"><button class="ghost" id="btnExportHistory" type="button">기록 CSV 내보내기</button></div>
@@ -578,7 +579,13 @@ window.PoomCore = (function(){
     return {perMove: any? perMove : null, cents: centroids(samples), tune};
   }
 
-  return {SEQ, DIR_KO, I, features, avg, fullBody, facing, frontFoot, techOf, centroids, nearestTech, measure, judge, buildRefs, armVec};
+  // 동작 중 판정용: 어깨·골반·무릎·발목만 보이면 OK (뒷모습은 얼굴이 안 보이니 코는 제외)
+  function bodyVisible(lm){
+    const need=[11,12,23,24,25,26,27,28];
+    return need.every(i=>{ const p=lm[i]; return (p.visibility??1)>0.5 && p.x>0.005 && p.x<0.995 && p.y>0.005 && p.y<0.998; });
+  }
+
+  return {SEQ, DIR_KO, I, features, avg, fullBody, bodyVisible, facing, frontFoot, techOf, centroids, nearestTech, measure, judge, buildRefs, armVec};
 })();
 </script>
 
@@ -646,7 +653,9 @@ function paintGrid(){
   SEQ.forEach((m,i)=>{
     const c=$('c'+m.n); c.className='cell'; const sm=c.querySelector('small'); sm.textContent='';
     if(isPoseRec()){ const n=poses[i].length; if(n){ sm.textContent=n; c.classList.add(n>=settings.poseN?'rec':'half'); } }
-    else if(isRec()){ if(S.recBuf[i]) c.classList.add('rec'); }
+    else if(isRec()){
+      const last = (S.phase==='idle' && !S.recBuf.some(Boolean)) ? runs.filter(r=>S.rec==='video' ? r.src==='video' : r.src!=='video').slice(-1)[0] : null; // 쉴 때는 마지막 저장본 표시
+      if(S.recBuf[i] || (last && last.moves && last.moves[i])) c.classList.add('rec'); }
     else { const r=S.results[i];
       if(r){ if(r.skipped) c.classList.add('skip'); else { const x=xCount(r); c.classList.add(x===0?'pass':x===1?'part':'fail'); } } }
     const selectable = isPoseRec() || S.mode==='practice';
@@ -836,7 +845,7 @@ async function startCamera(){
   stream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:settings.camera, width:{ideal:1920}, height:{ideal:1080}}});
   video.srcObject=stream; await video.play();
   fitCanvas(video.videoWidth, video.videoHeight);
-  $('camEmpty').hidden=true; const st=$('camStatus'); st.textContent='카메라 켜짐'; st.classList.add('live');
+  $('camEmpty').hidden=true; const st=$('camStatus'); st.textContent='카메라 켜짐'; st.style.color=''; st.classList.add('live'); bodyShown=null;
   if(!running){ running=true; requestAnimationFrame(loop); }
 }
 function stopCamera(){
@@ -909,7 +918,7 @@ function tick(now){
   }
 }
 function beginRun(now){
-  S.phase='run'; S.attempts=0; S.startTime=now; S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.waitEnd=false; S.lockUntil=0;
+  S.phase='run'; S.lastBodyAt=now; S.attempts=0; S.startTime=now; S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.waitEnd=false; S.lockUntil=0;
   if(S.mode==='test' || (isRec() && S.rec==='run')) S.idx=0;
   const m=SEQ[S.idx];
   if(S.mode==='practice' || isPoseRec()){
@@ -930,16 +939,24 @@ function endRun(){ // 종료 버튼
   if(isPoseRec()){ stopSession(); cmd('저장 완료', `동작별 기준 ${poses.filter(p=>p.length).length}/18 동작`, 'ok', 2200); return; }
   if(isRec()){
     const got=S.recBuf.filter(Boolean).length;
-    if(got){ runs.push({date:new Date().toISOString(), src:'camera', moves:SEQ.map((_,i)=>S.recBuf[i]||null), timing:SEQ.map((_,i)=>S.timing[i]||null)}); saveRefs(); }
-    note(got ? `연속 기준 ${runs.length}회 저장됨 (${got}/18 동작). 멈춤·속도 기준이 바뀌었어요.` : '저장된 동작이 없어 기록하지 않았어요.');
+    if(got>=MIN_RUN){ runs.push({date:new Date().toISOString(), src:'camera', moves:SEQ.map((_,i)=>S.recBuf[i]||null), timing:SEQ.map((_,i)=>S.timing[i]||null)}); saveRefs(); }
+    note(got>=MIN_RUN ? `✓ 연속 기준 ${runs.length}회째 저장됨 (${got}/18 동작). 설정에서 확인·삭제할 수 있어요.` : `저장 안 함 · 동작을 ${got}개만 찾았어요(최소 ${MIN_RUN}개). 전신이 다 보이게 서서 다시 해 주세요.`);
   }
   S.phase='closing'; S.phaseEnd=performance.now()+settings.readySec*1000; S.waitEnd=false;
   speak('바로'); setNow(); paintGrid(); setControls();
 }
 
 // ---------- 동작 끊기 · 판정 ----------
+const MIN_RUN = 9; // 연속·영상 기준은 18동작 중 최소 9개를 찾아야 저장 (엉뚱한 기준이 섞이지 않게)
+let bodyShown=null;
+function bodyStatus(ok){
+  if(ok===bodyShown) return; bodyShown=ok;
+  const st=$('camStatus'); if(!stream && !S.processing) return;
+  st.textContent = ok ? '전신 인식 중 ✓' : '몸이 다 안 보여요 · 판정 멈춤';
+  st.style.color = ok ? 'var(--pass)' : 'var(--fail)';
+}
 function onNoPose(now){
-  S.energy*=0.9; S.full=false; updateMotion();
+  S.energy*=0.9; S.full=false; updateMotion(); bodyStatus(false);
   if(S.phase==='run' && now-S.lastPose>1200 && !S.processing) $('cmdSub').textContent='몸이 안 보여요 · 전신이 화면에 나오게 서 주세요';
 }
 function onPose(lm, w3, now, W, H){
@@ -955,6 +972,7 @@ function onPose(lm, w3, now, W, H){
   }
   S.prev=p2; S.prevT=now; S.lastPose=now;
   S.full=Core.fullBody(lm);
+  const body=Core.bodyVisible(lm); if(body) S.lastBodyAt=now; bodyStatus(body);
   updateMotion();
   if(S.phase==='ready'){ if(S.full && S.energy<LO()){ S.swBuf.push(f.sw); if(S.swBuf.length>60) S.swBuf.shift(); } }
   else if(S.phase==='run' && !S.waitEnd) onRun(f, now);
@@ -962,6 +980,11 @@ function onPose(lm, w3, now, W, H){
 
 function onRun(f, now){
   if(now < S.lockUntil){ S.seg='await'; S.kickMax={L:-9,R:-9}; return; }
+  if(now - (S.lastBodyAt||-1e9) > 400){ // 다리·어깨가 화면 밖이면 판정하지 않음
+    if(S.seg!=='await'){ S.seg='await'; S.tentative=null; S.segStart=null; }
+    if(!S.processing) $('cmdSub').textContent='몸이 다 안 보여요 · 발끝까지 화면에 나오게 서 주세요';
+    return;
+  }
   if(S.seg==='await'||S.seg==='moving'){ S.kickMax.L=Math.max(S.kickMax.L,f.kickL); S.kickMax.R=Math.max(S.kickMax.R,f.kickR); }
   const m=SEQ[S.idx];
   if(S.seg==='await'){
@@ -1060,7 +1083,7 @@ async function processVideo(file){
   try{ await new Promise((res,rej)=>{ v.onloadedmetadata=res; v.onerror=()=>rej(new Error('video')); }); }
   catch(e){ cmd('!', '영상을 열 수 없어요 · mp4나 mov 파일인지 확인해 주세요', 'bad'); URL.revokeObjectURL(url); v.remove(); return; }
   S.processing=true; S.phase='run'; S.idx=0; S.recBuf=[]; S.timing=[]; S.marks=[]; S.waitEnd=false;
-  S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.prev=null; S.energy=0; S.lockUntil=0;
+  S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.prev=null; S.energy=0; S.lockUntil=0; S.lastBodyAt=-1e9; bodyShown=null;
   const sw=[]; let swDone=false;
   $('camEmpty').hidden=true; $('progress').hidden=false; setNow(); setControls(); paintGrid();
   cmd('분석 중', '사범님 영상을 보는 중이에요', 'white', 1500);
@@ -1090,7 +1113,7 @@ async function processVideo(file){
   if(S.seg==='still' && !S.waitEnd && S.still.length){ commit(evaluate(), v.currentTime*1000); }
   const got=S.recBuf.filter(Boolean).length;
   S.processing=false; S.phase='idle'; $('progress').hidden=true;
-  if(got){
+  if(got>=MIN_RUN){
     runs.push({date:new Date().toISOString(), src:'video', moves:SEQ.map((_,i)=>S.recBuf[i]||null), timing:SEQ.map((_,i)=>S.timing[i]||null)}); saveRefs();
     const marks=SEQ.map((_,i)=>S.marks[i]||null);
     if(demo.url) URL.revokeObjectURL(demo.url);
@@ -1100,8 +1123,8 @@ async function processVideo(file){
   }
   URL.revokeObjectURL(url); v.remove();
   const miss = SEQ.filter((_,i)=>!S.recBuf[i]).map(m=>m.n);
-  cmd(got?'완료':'!', got ? `${got}/18 동작을 찾았어요` : '동작을 찾지 못했어요 · 전신이 나오는 영상인지 확인해 주세요', got?'ok':'bad', 4000);
-  note(got ? `사범님 영상으로 기준을 만들었어요 (${got}/18 동작).${miss.length?` 못 찾은 동작: ${miss.join(', ')}번 · 동작 끝에 조금 더 멈춘 영상이면 좋아요.`:''}${got&&!demo.saved?' 시범 영상은 이 기기에 저장되지 못해 이번 접속에서만 보여요.':''}` : '');
+  cmd(got>=MIN_RUN?'완료':'!', got>=MIN_RUN ? `${got}/18 동작을 찾았어요` : got ? `${got}개만 찾아서 기준으로 저장하지 않았어요` : '동작을 찾지 못했어요 · 전신이 나오는 영상인지 확인해 주세요', got>=MIN_RUN?'ok':'bad', 4000);
+  note(got && got<MIN_RUN ? `동작을 ${got}개만 찾았어요. 전신이 다 나오고, 동작 끝마다 잠깐 멈춘 영상으로 다시 올려 주세요.` : got ? `사범님 영상으로 기준을 만들었어요 (${got}/18 동작).${miss.length?` 못 찾은 동작: ${miss.join(', ')}번 · 동작 끝에 조금 더 멈춘 영상이면 좋아요.`:''}${got&&!demo.saved?' 시범 영상은 이 기기에 저장되지 못해 이번 접속에서만 보여요.':''}` : '');
   S.waitEnd=false; setNow(); setControls(); paintGrid();
 }
 
@@ -1200,7 +1223,8 @@ function renderRefs(){
   const poseRow = `<div class="row"><span>동작별 기준 · ${nPose}/18 동작 · 총 ${nShots}장</span>${nShots?'<button class="x" data-delpose="1" type="button">모두 삭제</button>':''}</div>`;
   const tune = R.tune.fromRef ? `<div class="row"><span>동작 끊기 · 사범님 평균 멈춤 ${(R.tune.med/1000).toFixed(2)}초 → 시험에서 ${R.tune.tent}ms부터 판정</span></div>` : '';
   const runRows = runs.map((r,i)=>`<div class="row"><span>${r.src==='video'?'영상':'연속'} ${i+1} · ${fmtDate(r.date)} · ${r.moves.filter(Boolean).length}/18 동작</span><button class="x" data-del="${i}" type="button">삭제</button></div>`).join('');
-  el.innerHTML = demoRow + poseRow + (runRows || '<div class="empty">연속·영상 기준이 아직 없어요.</div>') + tune;
+  const allDel = runs.length>1 ? '<div class="btns"><button class="ghost" data-delruns="1" type="button">연속·영상 기준 모두 삭제</button></div>' : '';
+  el.innerHTML = demoRow + poseRow + (runRows || '<div class="empty">연속·영상 기준이 아직 없어요.</div>') + allDel + tune;
 }
 function renderHistory(){
   const el=$('historyList');
@@ -1230,6 +1254,7 @@ function bindSettings(){
   $('refList').onclick=async e=>{
     const b=e.target.closest('button'); if(!b) return;
     if(b.dataset.del!=null){ if(!confirmTap(b)) return; runs.splice(+b.dataset.del,1); saveRefs(); }
+    else if(b.dataset.delruns){ if(!confirmTap(b)) return; runs=[]; saveRefs(); paintGrid(); }
     else if(b.dataset.delpose){ if(!confirmTap(b)) return; poses=SEQ.map(()=>[]); saveRefs(); paintGrid(); setNow(); }
     else if(b.dataset.deldemo){ if(!confirmTap(b)) return; await idb.del('demo'); if(demo.url) URL.revokeObjectURL(demo.url); demo={url:null,marks:null,date:null,saved:false}; hideDemo(); refBadge(); renderRefs(); setNow(); }
   };
