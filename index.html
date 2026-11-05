@@ -346,7 +346,7 @@ td.nt{color:var(--muted);font-size:13px}
     </section>
 
     <section>
-      <p class="hint" style="margin-bottom:14px">화면 버전 <b>11-05 16:10</b> · 새 기능이 안 보이면 이 숫자를 확인하고 새로고침해 주세요</p>
+      <p class="hint" style="margin-bottom:14px">화면 버전 <b>11-05 16:20</b> · 새 기능이 안 보이면 이 숫자를 확인하고 새로고침해 주세요</p>
       <h3>최근 기록</h3>
       <div class="list" id="historyList"></div>
       <div class="btns" style="margin-top:10px"><button class="ghost" id="btnExportHistory" type="button">기록 CSV 내보내기</button></div>
@@ -627,12 +627,13 @@ const S = {
   startTime:0, phaseEnd:0, readySw:0.7, swBuf:[], full:false, lockUntil:0,
   energy:0, prev:null, prevT:0,
   seg:'await', segStart:null, moveStart:0, stillStart:0, still:[], tentative:null, kickMax:{L:-9,R:-9}, pendingStill:null,
-  lastPose:0, processing:false,
+  lastPose:0, processing:false, noise:0, noiseBuf:[],
 };
 let landmarker=null, stream=null, running=false, lastVideoTime=-1, audioCtx=null, wakeLock=null, modelLoaded=null;
 const video=$('video'), canvas=$('view'), g=canvas.getContext('2d'), demoEl=$('demo');
 
-const LO = ()=>0.25*settings.sens, HI = ()=>0.55*settings.sens;
+// 멈춤/움직임 기준: 준비 자세 때 잰 떨림(noise)보다 확실히 커야 움직임으로 봄
+const LO = ()=>Math.max(0.25, (S.noise||0)*1.6)*settings.sens, HI = ()=>Math.max(0.55, LO()/settings.sens*2.2)*settings.sens;
 const isRec = ()=> S.mode==='record';
 const isPoseRec = ()=> isRec() && S.rec==='pose';
 const isVideoRec = ()=> isRec() && S.rec==='video';
@@ -761,6 +762,7 @@ function updateTimer(now){
 }
 function updateMotion(){
   const max=HI()*3;
+  if(settings.detail) document.querySelector('.motion span').textContent=`움직임 ${S.energy.toFixed(2)} / 멈춤 ${LO().toFixed(2)}`;
   $('motionFill').style.width = Math.min(100, S.energy/max*100)+'%';
   $('motionHi').style.left = (HI()/max*100)+'%';
 }
@@ -918,6 +920,7 @@ function tick(now){
   }
 }
 function beginRun(now){
+  if(S.noiseBuf.length>10){ const a=S.noiseBuf.slice().sort((x,y)=>x-y); S.noise=a[Math.floor(a.length*0.6)]; }
   S.phase='run'; S.lastBodyAt=now; S.attempts=0; S.startTime=now; S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.waitEnd=false; S.lockUntil=0;
   if(S.mode==='test' || (isRec() && S.rec==='run')) S.idx=0;
   const m=SEQ[S.idx];
@@ -962,15 +965,19 @@ function onNoPose(now){
 function onPose(lm, w3, now, W, H){
   const p2=lm.map(p=>({x:p.x*W, y:p.y*H}));
   const f=Core.features(p2, w3);
+  // 관절 떨림을 줄이려고 위치를 부드럽게 한 뒤 속도를 계산 (멀리 서 있으면 떨림이 커짐)
+  const J=[13,14,15,16,25,26,27,28];
+  const sm = J.map((j,k)=> S.prev && S.prev[k] ? {x:S.prev[k].x*0.5+p2[j].x*0.5, y:S.prev[k].y*0.5+p2[j].y*0.5} : {x:p2[j].x, y:p2[j].y});
   if(S.prev){
     const dt=(now-S.prevT)/1000;
     if(dt>0 && dt<0.5){
-      let s=0; const J=[13,14,15,16,25,26,27,28];
-      for(const j of J) s+=Math.hypot(p2[j].x-S.prev[j].x, p2[j].y-S.prev[j].y);
+      let s=0;
+      for(let k=0;k<J.length;k++) s+=Math.hypot(sm[k].x-S.prev[k].x, sm[k].y-S.prev[k].y);
       S.energy = S.energy*0.6 + (s/J.length/f.T/dt)*0.4;
     }
   }
-  S.prev=p2; S.prevT=now; S.lastPose=now;
+  S.prev=sm; S.prevT=now; S.lastPose=now;
+  if(S.phase==='ready' && Core.fullBody(lm)){ S.noiseBuf.push(S.energy); if(S.noiseBuf.length>90) S.noiseBuf.shift(); }
   S.full=Core.fullBody(lm);
   const body=Core.bodyVisible(lm); if(body) S.lastBodyAt=now; bodyStatus(body);
   updateMotion();
@@ -1083,7 +1090,7 @@ async function processVideo(file){
   try{ await new Promise((res,rej)=>{ v.onloadedmetadata=res; v.onerror=()=>rej(new Error('video')); }); }
   catch(e){ cmd('!', '영상을 열 수 없어요 · mp4나 mov 파일인지 확인해 주세요', 'bad'); URL.revokeObjectURL(url); v.remove(); return; }
   S.processing=true; S.phase='run'; S.idx=0; S.recBuf=[]; S.timing=[]; S.marks=[]; S.waitEnd=false;
-  S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.prev=null; S.energy=0; S.lockUntil=0; S.lastBodyAt=-1e9; bodyShown=null;
+  S.seg='await'; S.segStart=null; S.tentative=null; S.kickMax={L:-9,R:-9}; S.pendingStill=null; S.prev=null; S.energy=0; S.lockUntil=0; S.lastBodyAt=-1e9; bodyShown=null; S.noise=0; S.noiseBuf=[];
   const sw=[]; let swDone=false;
   $('camEmpty').hidden=true; $('progress').hidden=false; setNow(); setControls(); paintGrid();
   cmd('분석 중', '사범님 영상을 보는 중이에요', 'white', 1500);
@@ -1096,8 +1103,8 @@ async function processVideo(file){
     if(lm){
       if(!swDone){ // 영상 첫 부분 = 준비 자세로 방향 기준 잡기
         const W=canvas.width,H=canvas.height; const f=Core.features(lm.map(p=>({x:p.x*W,y:p.y*H})), w3);
-        if(Core.fullBody(lm)) sw.push(f.sw);
-        if(mediaMs>1200 || S.energy>HI()){ if(sw.length) S.readySw=sw.sort((a,b)=>a-b)[Math.floor(sw.length/2)]; swDone=true; }
+        if(Core.fullBody(lm)){ sw.push(f.sw); if(mediaMs>200) S.noiseBuf.push(S.energy); }
+        if(mediaMs>1200 || S.energy>HI()){ if(sw.length) S.readySw=sw.sort((a,b)=>a-b)[Math.floor(sw.length/2)]; if(S.noiseBuf.length>5){ const a=S.noiseBuf.slice().sort((x,y)=>x-y); S.noise=Math.min(a[Math.floor(a.length*0.6)], 0.6); } swDone=true; }
       }
       onPose(lm, w3, mediaMs, canvas.width, canvas.height);
     } else onNoPose(mediaMs);
@@ -1166,6 +1173,7 @@ async function startSession(){
   if(S.mode==='test' || (isRec()&&S.rec==='run')) S.idx=0;
   $('timer').textContent='0:00'; $('hTimer').textContent='0:00';
   showVerdict(null); defaultNote();
+  S.noiseBuf=[]; S.noise=0;
   S.phase='ready'; S.phaseEnd=performance.now()+settings.readySec*1000;
   speak('준비'); setNow(); paintGrid(); setControls();
 }
